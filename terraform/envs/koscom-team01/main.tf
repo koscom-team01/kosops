@@ -353,17 +353,29 @@ resource "ncloud_access_control_group_rule" "dp_rules" {
     port_range = "8472"
   }
 
-  # Ingress HTTP/HTTPS 트래픽 전달용 NodePort 대역 개방 (LB Subnet 1 및 2 대역 허용)
+  # Ingress HTTP/HTTPS 트래픽 전달용 포트 개방 (LB Subnet 1 및 2 대역에서 노드의 hostPort 80/443 인입 허용)
   inbound {
     protocol   = "TCP"
     ip_block   = "192.168.2.0/24"
-    port_range = "30000-32767"
+    port_range = "80"
   }
 
   inbound {
     protocol   = "TCP"
     ip_block   = "192.168.3.0/24"
-    port_range = "30000-32767"
+    port_range = "80"
+  }
+
+  inbound {
+    protocol   = "TCP"
+    ip_block   = "192.168.2.0/24"
+    port_range = "443"
+  }
+
+  inbound {
+    protocol   = "TCP"
+    ip_block   = "192.168.3.0/24"
+    port_range = "443"
   }
 
   outbound {
@@ -469,6 +481,14 @@ tls-san:
   - "${ncloud_lb.api_lb.domain_name}"
 EOT
 
+# Harbor 사설 레지스트리(Insecure Registry) 등록 - 사용자 도메인 hwangonjang.com 적용
+cat <<EOT > /etc/rancher/rke2/registries.yaml
+mirrors:
+  "harbor.hwangonjang.com":
+    endpoint:
+      - "https://harbor.hwangonjang.com"
+EOT
+
 systemctl enable rke2-server.service
 systemctl start rke2-server.service
 EOF
@@ -499,6 +519,14 @@ server: "https://${ncloud_server.rke2_cp.private_ip}:9345"
 token: "${random_password.rke2_token.result}"
 EOT
 
+# Harbor 사설 레지스트리(Insecure Registry) 등록 - 사용자 도메인 hwangonjang.com 적용
+cat <<EOT > /etc/rancher/rke2/registries.yaml
+mirrors:
+  "harbor.hwangonjang.com":
+    endpoint:
+      - "https://harbor.hwangonjang.com"
+EOT
+
 systemctl enable rke2-agent.service
 systemctl start rke2-agent.service
 EOF
@@ -506,6 +534,7 @@ EOF
 
 # Auto Scaling Group 정의 (2대의 DP 노드를 가용하며, 룰 기반 오토스케일링을 위해 2~4대로 범위 설정)
 # DP는 Private Subnet 2(Zone KR-2)에 위치하도록 배치
+# 로드밸런서의 대상 그룹(HTTP, HTTPS)을 ASG와 결합하여 인스턴스 자동 등록 연동
 resource "ncloud_auto_scaling_group" "dp_asg" {
   name                    = "team1-rke2-dp-asg"
   launch_configuration_no = ncloud_launch_configuration.dp_lc.id
@@ -513,6 +542,12 @@ resource "ncloud_auto_scaling_group" "dp_asg" {
   min_size                = 2
   max_size                = 4
   desired_capacity        = 2
+  health_check_type_code  = "LOADB"
+
+  linked_target_group_list = [
+    ncloud_lb_target_group.web_http_tg.target_group_no,
+    ncloud_lb_target_group.web_https_tg.target_group_no
+  ]
 }
 
 # ASG 룰 정의 (Scale-Out / Scale-In 정책 정의)
@@ -570,4 +605,63 @@ resource "ncloud_lb_listener" "api_listener" {
   protocol         = "TCP"
   port             = 6443
   target_group_no  = ncloud_lb_target_group.api_tg.id
+}
+
+# 9. Web Service Load Balancer (HTTP: 80 / HTTPS: 443)
+# 외부 웹 서비스 인그레스(Ingress) 트래픽 전달용 퍼블릭 네트워크 로드밸런서(NLB) 개설
+resource "ncloud_lb" "web_lb" {
+  name           = "team1-web-lb"
+  network_type   = "PUBLIC"
+  type           = "NETWORK"
+  subnet_no_list = [ncloud_subnet.team1_lb_kr1.id, ncloud_subnet.team1_lb_kr2.id]
+}
+
+# Web HTTP 대상 그룹 (RKE2 노드의 hostPort 80 바인딩)
+resource "ncloud_lb_target_group" "web_http_tg" {
+  vpc_no      = ncloud_vpc.vpc.id
+  protocol    = "TCP"
+  target_type = "VSVR"
+  port        = 80
+  name        = "team1-web-http-tg"
+
+  health_check {
+    protocol       = "TCP"
+    port           = 80
+    cycle          = 30
+    up_threshold   = 2
+    down_threshold = 2
+  }
+}
+
+# Web HTTPS 대상 그룹 (RKE2 노드의 hostPort 443 바인딩)
+resource "ncloud_lb_target_group" "web_https_tg" {
+  vpc_no      = ncloud_vpc.vpc.id
+  protocol    = "TCP"
+  target_type = "VSVR"
+  port        = 443
+  name        = "team1-web-https-tg"
+
+  health_check {
+    protocol       = "TCP"
+    port           = 443
+    cycle          = 30
+    up_threshold   = 2
+    down_threshold = 2
+  }
+}
+
+# Web HTTP 리스너 (Port 80)
+resource "ncloud_lb_listener" "web_http_listener" {
+  load_balancer_no = ncloud_lb.web_lb.id
+  protocol         = "TCP"
+  port             = 80
+  target_group_no  = ncloud_lb_target_group.web_http_tg.id
+}
+
+# Web HTTPS 리스너 (Port 443)
+resource "ncloud_lb_listener" "web_https_listener" {
+  load_balancer_no = ncloud_lb.web_lb.id
+  protocol         = "TCP"
+  port             = 443
+  target_group_no  = ncloud_lb_target_group.web_https_tg.id
 }

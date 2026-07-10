@@ -21,10 +21,10 @@ echo -e "${GREEN}   |_|\_\\\___/ |____/ \___/ |_|   |____/ ${NC}"
 echo -e "${YELLOW}   KOSCOM New Hire DevOps Project - team1 (kosops)${NC}"
 echo -e "${YELLOW}======================================================================${NC}"
 
-# 1. 인자 처리 및 입력 자동화
-ACCESS_KEY="${1:-""}"
-SECRET_KEY="${2:-""}"
-ADMIN_IP="${3:-""}"
+# 1. 인자 처리 및 입력 자동화 (명령어 인자 -> 환경 변수 순으로 탐색)
+ACCESS_KEY="${1:-$NCP_ACCESS_KEY}"
+SECRET_KEY="${2:-$NCP_SECRET_KEY}"
+ADMIN_IP="${3:-$NCP_ADMIN_IP}"
 
 # Access Key 입력 확인
 if [ -z "$ACCESS_KEY" ]; then
@@ -191,6 +191,6 @@ echo -e "----------------------------------------------------------------------"
 echo -e "1. Kubeconfig 경로: ${GREEN}export KUBECONFIG=$(pwd)/$LOCAL_KUBECONFIG${NC}"
 echo -e "2. Bastion SSH 접속: ${GREEN}ssh -i $PEM_FILE ncloud@$BASTION_IP${NC}"
 echo -e "3. Private Node SSH 접속: ${GREEN}ssh -i $PEM_FILE -o ProxyCommand=\"ssh -i $PEM_FILE -W %h:%p ncloud@$BASTION_IP\" ncloud@$CP_PRIVATE_IP${NC}"
-echo -e "4. ArgoCD 호스트 (Nginx Ingress 설정 필요): ${GREEN}http://argocd.team1.kosops.com${NC}"
-echo -e "5. Harbor 호스트 (Nginx Ingress 설정 필요): ${GREEN}http://harbor.team1.kosops.com${NC}"
+echo -e "4. ArgoCD 호스트 (Nginx Ingress 설정 필요): ${GREEN}https://argocd.hwangonjang.com${NC}"
+echo -e "5. Harbor 호스트 (Nginx Ingress 설정 필요): ${GREEN}https://harbor.hwangonjang.com${NC}"
 echo -e "${YELLOW}======================================================================${NC}"

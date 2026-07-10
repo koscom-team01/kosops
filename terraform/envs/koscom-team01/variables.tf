@@ -33,3 +33,9 @@ variable "zone_kr2" {
   description = "배포할 가용 영역 2 (Zone 2)"
   default     = "KR-2"
 }
+
+variable "ncloud_site" {
+  type        = string
+  description = "Naver Cloud Platform Site (public 또는 fin)"
+  default     = "public"
+}

@@ -4,10 +4,13 @@ expose:
     enabled: false # 테스트 목적으로 TLS 비활성화 (보안망 내부용)
   ingress:
     hosts:
-      core: harbor.team1.kosops.com
+      core: harbor.hwangonjang.com
     className: nginx
+    annotations:
+      ingress.kubernetes.io/ssl-redirect: "false"
+      nginx.ingress.kubernetes.io/proxy-body-size: "0"
 
-externalURL: http://harbor.team1.kosops.com
+externalURL: https://harbor.hwangonjang.com
 
 # RKE2에 내장된 local-path 스토리지 클래스를 사용하여 동적 볼륨 프로비저닝 적용
 persistence:

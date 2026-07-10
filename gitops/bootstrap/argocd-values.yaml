@@ -11,6 +11,6 @@ ingress:
   annotations:
     ingress.kubernetes.io/ssl-redirect: "false"
   hosts:
-    - argocd.team1.kosops.com
+    - argocd.hwangonjang.com
   paths:
     - /
