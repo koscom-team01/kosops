@@ -39,3 +39,9 @@ variable "ncloud_site" {
   description = "Naver Cloud Platform Site (public 또는 fin)"
   default     = "public"
 }
+
+variable "zone" {
+  type        = string
+  description = "Placeholder legacy zone parameter to silence tfvars warnings"
+  default     = "KR-1"
+}

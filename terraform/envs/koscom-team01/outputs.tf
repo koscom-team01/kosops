@@ -9,7 +9,7 @@ output "rke2_cp_private_ip" {
 }
 
 output "api_lb_domain" {
-  value       = ncloud_lb.api_lb.domain_name
+  value       = ncloud_lb.api_lb.domain
   description = "K8s API Server Load Balancer Domain Name (Port 6443)"
 }
 

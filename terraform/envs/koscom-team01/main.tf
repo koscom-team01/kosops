@@ -16,15 +16,15 @@ data "ncloud_server_products" "bastion_spec" {
   }
   filter {
     name   = "cpu_count"
-    values = ["1"]
+    values = ["2"]
   }
   filter {
     name   = "memory_size"
-    values = ["2GB"]
+    values = ["4GB"]
   }
   filter {
     name   = "product_type"
-    values = ["STAND"]
+    values = ["HICPU"]
   }
 }
 
@@ -62,7 +62,7 @@ data "ncloud_server_products" "dp_spec" {
   }
   filter {
     name   = "memory_size"
-    values = ["4GB"]
+    values = ["8GB"]
   }
   filter {
     name   = "product_type"
@@ -438,36 +438,10 @@ resource "local_file" "private_key" {
   file_permission = "0600"
 }
 
-# 6. 컴퓨팅 인스턴스 (Bastion, CP)
-resource "ncloud_server" "bastion" {
-  subnet_no                 = ncloud_subnet.team1_pub_kr1.id
-  name                      = "team1-bastion"
-  server_image_product_code = data.ncloud_server_images.images.server_images[0].product_code
-  server_product_code       = data.ncloud_server_products.bastion_spec.server_products[0].product_code
-  login_key_name            = ncloud_login_key.key.key_name
-  access_control_group_list = [ncloud_access_control_group.bastion_acg.id]
-}
-
-resource "ncloud_public_ip" "bastion_ip" {
-  server_instance_no = ncloud_server.bastion.id
-}
-
-# RKE2 클러스터 공유 비밀 토큰 자동 생성
-resource "random_password" "rke2_token" {
-  length  = 32
-  special = false
-}
-
-# RKE2 Control Plane (CP) 서버 기동 및 user_data를 통한 rke2-server 자동 부트스트랩
-resource "ncloud_server" "rke2_cp" {
-  subnet_no                 = ncloud_subnet.team1_pri_kr1.id
-  name                      = "team1-rke2-cp"
-  server_image_product_code = data.ncloud_server_images.images.server_images[0].product_code
-  server_product_code       = data.ncloud_server_products.cp_spec.server_products[0].product_code
-  login_key_name            = ncloud_login_key.key.key_name
-  access_control_group_list = [ncloud_access_control_group.cp_acg.id]
-
-  user_data = <<EOF
+# 5.1 RKE2 CP 서버 초기화 스크립트 정의
+resource "ncloud_init_script" "rke2_cp_init" {
+  name    = "team1-rke2-cp-init"
+  content = <<EOF
 #!/bin/bash
 # RKE2 Server Auto-Installation & Configuration
 curl -sfL https://get.rke2.io | INSTALL_RKE2_TYPE="server" sh -
@@ -478,7 +452,7 @@ write-kubeconfig-mode: "0644"
 token: "${random_password.rke2_token.result}"
 tls-san:
   - "team1-rke2-cp"
-  - "${ncloud_lb.api_lb.domain_name}"
+  - "${ncloud_lb.api_lb.domain}"
 EOT
 
 # Harbor 사설 레지스트리(Insecure Registry) 등록 - 사용자 도메인 hwangonjang.com 적용
@@ -492,20 +466,12 @@ EOT
 systemctl enable rke2-server.service
 systemctl start rke2-server.service
 EOF
-
-  depends_on = [ncloud_lb.api_lb]
 }
 
-# 7. Data Plane (DP) Auto Scaling Group (ASG) 구성
-# Launch Configuration 설정 (RKE2 Agent 자동 조인 구현)
-resource "ncloud_launch_configuration" "dp_lc" {
-  name                      = "team1-rke2-dp-lc"
-  server_image_product_code = data.ncloud_server_images.images.server_images[0].product_code
-  server_product_code       = data.ncloud_server_products.dp_spec.server_products[0].product_code
-  login_key_name            = ncloud_login_key.key.key_name
-  access_control_group_no_list = [ncloud_access_control_group.dp_acg.id]
-
-  user_data = <<EOF
+# 5.2 RKE2 DP 에이전트 초기화 스크립트 정의
+resource "ncloud_init_script" "rke2_dp_init" {
+  name    = "team1-rke2-dp-init"
+  content = <<EOF
 #!/bin/bash
 # RKE2 Agent Auto-Installation & Join to Control Plane
 # CP 서버가 기동될 때까지 약간의 대기시간 부여
@@ -532,9 +498,69 @@ systemctl start rke2-agent.service
 EOF
 }
 
-# Auto Scaling Group 정의 (2대의 DP 노드를 가용하며, 룰 기반 오토스케일링을 위해 2~4대로 범위 설정)
-# DP는 Private Subnet 2(Zone KR-2)에 위치하도록 배치
-# 로드밸런서의 대상 그룹(HTTP, HTTPS)을 ASG와 결합하여 인스턴스 자동 등록 연동
+# 5.3 Network Interfaces (Bastion, CP) - NCP VPC 환경에서는 ACG 부착을 위해 별도 NIC 생성이 필수적임
+resource "ncloud_network_interface" "bastion_nic" {
+  name                  = "team1-bastion-nic"
+  subnet_no             = ncloud_subnet.team1_pub_kr1.id
+  access_control_groups = [ncloud_access_control_group.bastion_acg.id]
+}
+
+resource "ncloud_network_interface" "cp_nic" {
+  name                  = "team1-rke2-cp-nic"
+  subnet_no             = ncloud_subnet.team1_pri_kr1.id
+  access_control_groups = [ncloud_access_control_group.cp_acg.id]
+}
+
+# 6. 컴퓨팅 인스턴스 (Bastion, CP)
+resource "ncloud_server" "bastion" {
+  name                      = "team1-bastion"
+  server_image_product_code = data.ncloud_server_images.images.server_images[0].product_code
+  server_product_code       = data.ncloud_server_products.bastion_spec.server_products[0].product_code
+  login_key_name            = ncloud_login_key.key.key_name
+
+  network_interface {
+    network_interface_no = ncloud_network_interface.bastion_nic.id
+    order                = 0
+  }
+}
+
+resource "ncloud_public_ip" "bastion_ip" {
+  server_instance_no = ncloud_server.bastion.id
+}
+
+# RKE2 클러스터 공유 비밀 토큰 자동 생성
+resource "random_password" "rke2_token" {
+  length  = 32
+  special = false
+}
+
+# RKE2 Control Plane (CP) 서버 기동
+resource "ncloud_server" "rke2_cp" {
+  name                      = "team1-rke2-cp"
+  server_image_product_code = data.ncloud_server_images.images.server_images[0].product_code
+  server_product_code       = data.ncloud_server_products.cp_spec.server_products[0].product_code
+  login_key_name            = ncloud_login_key.key.key_name
+  init_script_no            = ncloud_init_script.rke2_cp_init.id
+
+  network_interface {
+    network_interface_no = ncloud_network_interface.cp_nic.id
+    order                = 0
+  }
+
+  depends_on = [ncloud_lb.api_lb]
+}
+
+# 7. Data Plane (DP) Auto Scaling Group (ASG) 구성
+# Launch Configuration 설정
+resource "ncloud_launch_configuration" "dp_lc" {
+  name                      = "team1-rke2-dp-lc"
+  server_image_product_code = data.ncloud_server_images.images.server_images[0].product_code
+  server_product_code       = data.ncloud_server_products.dp_spec.server_products[0].product_code
+  login_key_name            = ncloud_login_key.key.key_name
+  init_script_no            = ncloud_init_script.rke2_dp_init.id
+}
+
+# Auto Scaling Group 정의
 resource "ncloud_auto_scaling_group" "dp_asg" {
   name                    = "team1-rke2-dp-asg"
   launch_configuration_no = ncloud_launch_configuration.dp_lc.id
@@ -543,8 +569,9 @@ resource "ncloud_auto_scaling_group" "dp_asg" {
   max_size                = 4
   desired_capacity        = 2
   health_check_type_code  = "LOADB"
+  access_control_group_no_list = [ncloud_access_control_group.dp_acg.id]
 
-  linked_target_group_list = [
+  target_group_list = [
     ncloud_lb_target_group.web_http_tg.target_group_no,
     ncloud_lb_target_group.web_https_tg.target_group_no
   ]
@@ -595,7 +622,6 @@ resource "ncloud_lb_target_group" "api_tg" {
 
 resource "ncloud_lb_target_group_attachment" "api_tg_attach" {
   target_group_no = ncloud_lb_target_group.api_tg.id
-  vpc_no          = ncloud_vpc.vpc.id
   target_no_list  = [ncloud_server.rke2_cp.id]
 }
 
