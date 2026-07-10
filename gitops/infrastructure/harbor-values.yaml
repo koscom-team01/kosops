@@ -1,0 +1,31 @@
+expose:
+  type: ingress
+  tls:
+    enabled: false # 테스트 목적으로 TLS 비활성화 (보안망 내부용)
+  ingress:
+    hosts:
+      core: harbor.team1.kosops.com
+    className: nginx
+
+externalURL: http://harbor.team1.kosops.com
+
+# RKE2에 내장된 local-path 스토리지 클래스를 사용하여 동적 볼륨 프로비저닝 적용
+persistence:
+  enabled: true
+  resourceTemplates:
+    - name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi
+# 데이터베이스, Redis, Registry 등 컴포넌트의 로컬 스토리지 볼륨 크기 제한 (비용/용량 최적화)
+database:
+  internal:
+    volumeSize: 2Gi
+redis:
+  internal:
+    volumeSize: 1Gi
+trivy:
+  enabled: false # CPU/Memory 사용량 절약을 위해 보안 취약점 스캐너 비활성화 (테스트용)

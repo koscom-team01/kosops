@@ -1,0 +1,42 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-app
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/koscom-team01/kosops.git' # 프로젝트 리포지토리 주소
+    targetRevision: HEAD
+    path: gitops/bootstrap
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+---
+# 예시: 인프라스트럭처 전용 ArgoCD App
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cluster-infrastructure
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/koscom-team01/kosops.git'
+    targetRevision: HEAD
+    path: gitops/infrastructure
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

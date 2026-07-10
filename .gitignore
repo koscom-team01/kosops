@@ -1,0 +1,20 @@
+# Terraform local states and configs
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+
+# Private credentials and keys (Security)
+*.pem
+team1-kosops-key.pem
+team1-kubeconfig.yaml
+terraform.tfvars
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
