@@ -3,17 +3,6 @@ kind: Namespace
 metadata:
   name: github-runner
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: github-runner-secret
-  namespace: github-runner
-type: Opaque
-stringData:
-  # GitHub Actions Runner Registration Token
-  # TODO: 사용자가 직접 깃허브 레포지토리 설정에서 발급받아 채워 넣어야 합니다.
-  runner-token: "PLACEHOLDER_PLEASE_UPDATE"
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -36,8 +25,8 @@ spec:
       - name: runner
         image: summerwind/actions-runner:latest
         env:
-        - name: REPO_URL
-          value: "https://github.com/koscom-team01/test-web-app" # 대상 애플리케이션 레포지토리 URL
+        - name: ORGANIZATION_URL
+          value: "https://github.com/koscom-team01"
         - name: RUNNER_TOKEN
           valueFrom:
             secretKeyRef:
