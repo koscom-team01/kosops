@@ -58,6 +58,12 @@ else
     fi
 fi
 
+# GitHub PAT 토큰 확인 및 입력 대화창 활성화
+if [ -z "$GITHUB_PAT" ]; then
+    echo -e "${YELLOW}[INPUT] GitHub Actions Runner 등록을 위한 GitHub PAT 토큰을 입력하세요:${NC}"
+    read -r GITHUB_PAT
+fi
+
 # 2. Terraform을 통한 NCP 리소스 생성
 echo -e "\n${GREEN}[Step 1] Naver Cloud VPC 및 RKE2 인프라 생성 (Terraform)...${NC}"
 cd terraform/envs/koscom-team01
@@ -178,6 +184,37 @@ else
 
     echo -e "${GREEN}[OK] ArgoCD Helm 배포 완료!${NC}"
 fi
+
+# 5.1 GitHub Actions Runner Token 조회 및 K8s Secret 생성
+echo -e "\n${GREEN}[Step 5.1] GitHub Actions Runner Token 조회 및 K8s Secret 생성...${NC}"
+GITHUB_ORG="koscom-team01"
+
+RESPONSE=$(curl -s -X POST \
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer $GITHUB_PAT" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  "https://api.github.com/orgs/${GITHUB_ORG}/actions/runners/registration-token")
+
+RUNNER_TOKEN=$(echo "$RESPONSE" | grep -o '"token": "[^"]*' | grep -o '[^"]*$')
+
+if [ -z "$RUNNER_TOKEN" ]; then
+    echo -e "${RED}[ERROR] GitHub API로부터 러너 토큰을 가져오지 못했습니다.${NC}"
+    echo -e "API 응답: $RESPONSE"
+    exit 1
+fi
+
+# 네임스페이스 및 Secret 생성
+kubectl create namespace github-runner --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic github-runner-secret \
+  -n github-runner \
+  --from-literal=runner-token="${RUNNER_TOKEN}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+echo -e "${GREEN}[OK] github-runner-secret 생성이 완료되었습니다.${NC}"
+
+# 6. GitOps Root Application 배포
+echo -e "\n${GREEN}[Step 6] GitOps Root Application 배포 (ArgoCD)...${NC}"
+kubectl apply -f gitops/bootstrap/root-app.yaml
+echo -e "${GREEN}[OK] GitOps Root Application 배포 완료!${NC}"
 
 echo -e "\n${YELLOW}======================================================================${NC}"
 echo -e "${GREEN}🎉 kosops 클러스터 및 플랫폼 서비스 자동 배포가 완료되었습니다!${NC}"

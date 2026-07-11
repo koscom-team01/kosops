@@ -29,8 +29,8 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        - name: ORGANIZATION_URL
-          value: "https://github.com/koscom-team01"
+        - name: RUNNER_ORG
+          value: "koscom-team01"
         - name: RUNNER_TOKEN
           valueFrom:
             secretKeyRef:
