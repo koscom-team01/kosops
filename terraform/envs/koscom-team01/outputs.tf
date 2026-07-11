@@ -4,7 +4,7 @@ output "bastion_public_ip" {
 }
 
 output "rke2_cp_private_ip" {
-  value       = ncloud_server.rke2_cp.private_ip
+  value       = ncloud_network_interface.cp_nic.private_ip
   description = "RKE2 Control Plane Server Private IP Address"
 }
 
@@ -14,7 +14,7 @@ output "api_lb_domain" {
 }
 
 output "rke2_token" {
-  value       = random_password.rke2_token.result
+  value       = random_string.rke2_token.result
   sensitive   = true
   description = "RKE2 Cluster Join Shared Token"
 }

@@ -78,7 +78,7 @@ API_LB_DOMAIN=$(terraform output -raw api_lb_domain)
 cd ../../..
 
 # pem 개인키 권한 축소 (SSH 보안 규칙 충족)
-PEM_FILE="team1-kosops-key.pem"
+PEM_FILE="$(pwd)/team1-kosops-key.pem"
 if [ -f "$PEM_FILE" ]; then
     chmod 600 "$PEM_FILE"
     echo -e "${GREEN}[INFO] SSH 개인키 권한 변경 완료 (chmod 600 ${PEM_FILE})${NC}"
@@ -101,13 +101,13 @@ while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
     
     # Bastion 터널링을 통해 CP Node 내부의 rke2.yaml 파일 생성 여부 체크
     if ssh -i "$PEM_FILE" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 \
-        -o ProxyCommand="ssh -i $PEM_FILE -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p ncloud@$BASTION_IP" \
-        ncloud@$CP_PRIVATE_IP "sudo test -f /etc/rancher/rke2/rke2.yaml" 2>/dev/null; then
+        -o ProxyCommand="ssh -i $PEM_FILE -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p root@$BASTION_IP" \
+        root@$CP_PRIVATE_IP "sudo test -f /etc/rancher/rke2/rke2.yaml" 2>/dev/null; then
         
         # 파일 권한 확인 및 읽기 가능 검증
         if ssh -i "$PEM_FILE" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-            -o ProxyCommand="ssh -i $PEM_FILE -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p ncloud@$BASTION_IP" \
-            ncloud@$CP_PRIVATE_IP "sudo chmod 644 /etc/rancher/rke2/rke2.yaml" 2>/dev/null; then
+            -o ProxyCommand="ssh -i $PEM_FILE -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p root@$BASTION_IP" \
+            root@$CP_PRIVATE_IP "sudo chmod 644 /etc/rancher/rke2/rke2.yaml" 2>/dev/null; then
             
             KUBECONFIG_READY=true
             break
@@ -132,8 +132,8 @@ LOCAL_KUBECONFIG="team1-kubeconfig.yaml"
 
 # Bastion 경유하여 rke2.yaml을 로컬로 가져옴
 ssh -i "$PEM_FILE" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-    -o ProxyCommand="ssh -i $PEM_FILE -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p ncloud@$BASTION_IP" \
-    ncloud@$CP_PRIVATE_IP "cat /etc/rancher/rke2/rke2.yaml" > "$LOCAL_KUBECONFIG"
+    -o ProxyCommand="ssh -i $PEM_FILE -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p root@$BASTION_IP" \
+    root@$CP_PRIVATE_IP "cat /etc/rancher/rke2/rke2.yaml" > "$LOCAL_KUBECONFIG"
 
 # 로컬 kubeconfig의 server 주소를 Localhost -> NCP Network Load Balancer Domain으로 변경
 sed -i.bak "s/127.0.0.1/$API_LB_DOMAIN/g" "$LOCAL_KUBECONFIG"
@@ -149,6 +149,11 @@ kubectl get nodes -o wide || {
     echo -e "개발자 공인 IP(admin_ip)가 ACG에 정상 등록되었는지 확인하세요."
     echo -e "임시 조치: Bastion 로컬 포트 포워딩을 통해 클러스터에 연결할 수 있습니다."
 }
+
+# 4.1 StorageClass 자동 설치 (RKE2 기본형에는 StorageClass가 없으므로 필수)
+echo -e "\n${GREEN}[Step 4.1] Rancher Local Path Provisioner StorageClass 설치...${NC}"
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.28/deploy/local-path-storage.yaml
+kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
 
 # 5. Helm을 활용한 ArgoCD & Harbor 배포
 echo -e "\n${GREEN}[Step 5] Helm을 통한 ArgoCD 및 Harbor Private Registry 배포...${NC}"
@@ -189,8 +194,8 @@ echo -e "\n${YELLOW}============================================================
 echo -e "${GREEN}🎉 kosops 클러스터 및 플랫폼 서비스 자동 배포가 완료되었습니다!${NC}"
 echo -e "----------------------------------------------------------------------"
 echo -e "1. Kubeconfig 경로: ${GREEN}export KUBECONFIG=$(pwd)/$LOCAL_KUBECONFIG${NC}"
-echo -e "2. Bastion SSH 접속: ${GREEN}ssh -i $PEM_FILE ncloud@$BASTION_IP${NC}"
-echo -e "3. Private Node SSH 접속: ${GREEN}ssh -i $PEM_FILE -o ProxyCommand=\"ssh -i $PEM_FILE -W %h:%p ncloud@$BASTION_IP\" ncloud@$CP_PRIVATE_IP${NC}"
+echo -e "2. Bastion SSH 접속: ${GREEN}ssh -i $PEM_FILE root@$BASTION_IP${NC}"
+echo -e "3. Private Node SSH 접속: ${GREEN}ssh -i $PEM_FILE -o ProxyCommand=\"ssh -i $PEM_FILE -W %h:%p root@$BASTION_IP\" root@$CP_PRIVATE_IP${NC}"
 echo -e "4. ArgoCD 호스트 (Nginx Ingress 설정 필요): ${GREEN}https://argocd.hwangonjang.com${NC}"
 echo -e "5. Harbor 호스트 (Nginx Ingress 설정 필요): ${GREEN}https://harbor.hwangonjang.com${NC}"
 echo -e "${YELLOW}======================================================================${NC}"

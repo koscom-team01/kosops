@@ -166,9 +166,10 @@ resource "ncloud_subnet" "team1_db_kr2" {
 
 # 3. NAT Gateway 및 라우팅 테이블
 resource "ncloud_nat_gateway" "nat_gw" {
-  vpc_no = ncloud_vpc.vpc.id
-  zone   = var.zone_kr1
-  name   = "hackathon-m-ng01"
+  vpc_no    = ncloud_vpc.vpc.id
+  subnet_no = ncloud_subnet.team1_nat_sub.id
+  zone      = var.zone_kr1
+  name      = "hackathon-m-ng01"
 }
 
 # Public 서브넷용 라우팅 테이블
@@ -353,28 +354,16 @@ resource "ncloud_access_control_group_rule" "dp_rules" {
     port_range = "8472"
   }
 
-  # Ingress HTTP/HTTPS 트래픽 전달용 포트 개방 (LB Subnet 1 및 2 대역에서 노드의 hostPort 80/443 인입 허용)
+  # Ingress HTTP/HTTPS 트래픽 전달용 포트 개방 (NLB 소스 IP 보존을 지원하기 위해 외부 통신 전체 개방)
   inbound {
     protocol   = "TCP"
-    ip_block   = "192.168.2.0/24"
+    ip_block   = "0.0.0.0/0"
     port_range = "80"
   }
 
   inbound {
     protocol   = "TCP"
-    ip_block   = "192.168.3.0/24"
-    port_range = "80"
-  }
-
-  inbound {
-    protocol   = "TCP"
-    ip_block   = "192.168.2.0/24"
-    port_range = "443"
-  }
-
-  inbound {
-    protocol   = "TCP"
-    ip_block   = "192.168.3.0/24"
+    ip_block   = "0.0.0.0/0"
     port_range = "443"
   }
 
@@ -428,40 +417,66 @@ resource "ncloud_access_control_group_rule" "lb_rules" {
 }
 
 # 5. 로그인 키 및 개인키 파일 로컬 저장
+resource "tls_private_key" "ssh_key" {
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
+
 resource "ncloud_login_key" "key" {
   key_name = var.login_key_name
 }
 
 resource "local_file" "private_key" {
-  content         = ncloud_login_key.key.private_key
+  content         = tls_private_key.ssh_key.private_key_pem
   filename        = "${path.module}/../../../team1-kosops-key.pem"
   file_permission = "0600"
 }
 
 # 5.1 RKE2 CP 서버 초기화 스크립트 정의
+resource "random_string" "init_suffix" {
+  length  = 6
+  special = false
+  upper   = false
+  numeric = true
+}
+
 resource "ncloud_init_script" "rke2_cp_init" {
-  name    = "team1-rke2-cp-init"
+  name    = "team1-rke2-cp-init-${random_string.init_suffix.result}"
   content = <<EOF
 #!/bin/bash
+# Enable SSH key authentication (Auto-injected since NCP VPC doesn't inject it for root)
+mkdir -p /root/.ssh
+chmod 700 /root/.ssh
+echo "${tls_private_key.ssh_key.public_key_openssh}" > /root/.ssh/authorized_keys
+chmod 600 /root/.ssh/authorized_keys
+
+# Disable SELinux and firewalld (Required for Rocky Linux 8)
+setenforce 0 || true
+sed -i 's/SELINUX=enforcing/SELINUX=permissive/g' /etc/selinux/config
+systemctl stop firewalld || true
+systemctl disable firewalld || true
+
 # RKE2 Server Auto-Installation & Configuration
 curl -sfL https://get.rke2.io | INSTALL_RKE2_TYPE="server" sh -
 
 mkdir -p /etc/rancher/rke2/
-cat <<EOT > /etc/rancher/rke2/config.yaml
+cat > /etc/rancher/rke2/config.yaml << EOL
 write-kubeconfig-mode: "0644"
-token: "${random_password.rke2_token.result}"
+token: "${random_string.rke2_token.result}"
 tls-san:
   - "team1-rke2-cp"
   - "${ncloud_lb.api_lb.domain}"
-EOT
+kubelet-arg:
+  - "fail-cgroupv1=false"
+EOL
 
-# Harbor 사설 레지스트리(Insecure Registry) 등록 - 사용자 도메인 hwangonjang.com 적용
-cat <<EOT > /etc/rancher/rke2/registries.yaml
+# Register Harbor Private Registry with hwangonjang.com
+cat > /etc/rancher/rke2/registries.yaml << EOL
 mirrors:
   "harbor.hwangonjang.com":
     endpoint:
       - "https://harbor.hwangonjang.com"
-EOT
+EOL
 
 systemctl enable rke2-server.service
 systemctl start rke2-server.service
@@ -470,31 +485,58 @@ EOF
 
 # 5.2 RKE2 DP 에이전트 초기화 스크립트 정의
 resource "ncloud_init_script" "rke2_dp_init" {
-  name    = "team1-rke2-dp-init"
+  name    = "team1-rke2-dp-init-${random_string.init_suffix.result}"
   content = <<EOF
 #!/bin/bash
+# Enable SSH key authentication (Auto-injected since NCP VPC doesn't inject it for root)
+mkdir -p /root/.ssh
+chmod 700 /root/.ssh
+echo "${tls_private_key.ssh_key.public_key_openssh}" > /root/.ssh/authorized_keys
+chmod 600 /root/.ssh/authorized_keys
+
+# Disable SELinux and firewalld (Required for Rocky Linux 8)
+setenforce 0 || true
+sed -i 's/SELINUX=enforcing/SELINUX=permissive/g' /etc/selinux/config
+systemctl stop firewalld || true
+systemctl disable firewalld || true
+
 # RKE2 Agent Auto-Installation & Join to Control Plane
-# CP 서버가 기동될 때까지 약간의 대기시간 부여
+# Wait for CP server to initialize
 sleep 60
 
 curl -sfL https://get.rke2.io | INSTALL_RKE2_TYPE="agent" sh -
 
 mkdir -p /etc/rancher/rke2/
-cat <<EOT > /etc/rancher/rke2/config.yaml
-server: "https://${ncloud_server.rke2_cp.private_ip}:9345"
-token: "${random_password.rke2_token.result}"
-EOT
+cat > /etc/rancher/rke2/config.yaml << EOL
+server: "https://${ncloud_network_interface.cp_nic.private_ip}:9345"
+token: "${random_string.rke2_token.result}"
+kubelet-arg:
+  - "fail-cgroupv1=false"
+EOL
 
-# Harbor 사설 레지스트리(Insecure Registry) 등록 - 사용자 도메인 hwangonjang.com 적용
-cat <<EOT > /etc/rancher/rke2/registries.yaml
+# Register Harbor Private Registry with hwangonjang.com
+cat > /etc/rancher/rke2/registries.yaml << EOL
 mirrors:
   "harbor.hwangonjang.com":
     endpoint:
       - "https://harbor.hwangonjang.com"
-EOT
+EOL
 
 systemctl enable rke2-agent.service
 systemctl start rke2-agent.service
+EOF
+}
+
+# 5.2.1 Bastion 서버 초기화 스크립트 정의
+resource "ncloud_init_script" "bastion_init" {
+  name    = "team1-bastion-init-${random_string.init_suffix.result}"
+  content = <<EOF
+#!/bin/bash
+# Enable SSH key authentication (Auto-injected since NCP VPC doesn't inject it for root)
+mkdir -p /root/.ssh
+chmod 700 /root/.ssh
+echo "${tls_private_key.ssh_key.public_key_openssh}" > /root/.ssh/authorized_keys
+chmod 600 /root/.ssh/authorized_keys
 EOF
 }
 
@@ -508,15 +550,18 @@ resource "ncloud_network_interface" "bastion_nic" {
 resource "ncloud_network_interface" "cp_nic" {
   name                  = "team1-rke2-cp-nic"
   subnet_no             = ncloud_subnet.team1_pri_kr1.id
+  private_ip            = cidrhost(ncloud_subnet.team1_pri_kr1.subnet, 11)
   access_control_groups = [ncloud_access_control_group.cp_acg.id]
 }
 
 # 6. 컴퓨팅 인스턴스 (Bastion, CP)
 resource "ncloud_server" "bastion" {
+  subnet_no                 = ncloud_subnet.team1_pub_kr1.id
   name                      = "team1-bastion"
   server_image_product_code = data.ncloud_server_images.images.server_images[0].product_code
   server_product_code       = data.ncloud_server_products.bastion_spec.server_products[0].product_code
   login_key_name            = ncloud_login_key.key.key_name
+  init_script_no            = ncloud_init_script.bastion_init.id
 
   network_interface {
     network_interface_no = ncloud_network_interface.bastion_nic.id
@@ -529,13 +574,14 @@ resource "ncloud_public_ip" "bastion_ip" {
 }
 
 # RKE2 클러스터 공유 비밀 토큰 자동 생성
-resource "random_password" "rke2_token" {
+resource "random_string" "rke2_token" {
   length  = 32
   special = false
 }
 
 # RKE2 Control Plane (CP) 서버 기동
 resource "ncloud_server" "rke2_cp" {
+  subnet_no                 = ncloud_subnet.team1_pri_kr1.id
   name                      = "team1-rke2-cp"
   server_image_product_code = data.ncloud_server_images.images.server_images[0].product_code
   server_product_code       = data.ncloud_server_products.cp_spec.server_products[0].product_code
@@ -552,12 +598,25 @@ resource "ncloud_server" "rke2_cp" {
 
 # 7. Data Plane (DP) Auto Scaling Group (ASG) 구성
 # Launch Configuration 설정
+resource "random_id" "dp_lc_suffix" {
+  byte_length = 4
+  keepers = {
+    init_script_id = ncloud_init_script.rke2_dp_init.id
+    image_code     = data.ncloud_server_images.images.server_images[0].product_code
+    product_code   = data.ncloud_server_products.dp_spec.server_products[0].product_code
+  }
+}
+
 resource "ncloud_launch_configuration" "dp_lc" {
-  name                      = "team1-rke2-dp-lc"
+  name                      = "team1-rke2-dp-lc-${random_id.dp_lc_suffix.hex}"
   server_image_product_code = data.ncloud_server_images.images.server_images[0].product_code
   server_product_code       = data.ncloud_server_products.dp_spec.server_products[0].product_code
   login_key_name            = ncloud_login_key.key.key_name
   init_script_no            = ncloud_init_script.rke2_dp_init.id
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Auto Scaling Group 정의
@@ -568,7 +627,7 @@ resource "ncloud_auto_scaling_group" "dp_asg" {
   min_size                = 2
   max_size                = 4
   desired_capacity        = 2
-  health_check_type_code  = "LOADB"
+  health_check_type_code  = "SVR"
   access_control_group_no_list = [ncloud_access_control_group.dp_acg.id]
 
   target_group_list = [
@@ -600,7 +659,7 @@ resource "ncloud_lb" "api_lb" {
   name           = "team1-api-lb"
   network_type   = "PUBLIC"
   type           = "NETWORK"
-  subnet_no_list = [ncloud_subnet.team1_lb_kr1.id, ncloud_subnet.team1_lb_kr2.id]
+  subnet_no_list = [ncloud_subnet.team1_lb_kr1.id]
 }
 
 # Target Group (CP 6443 포트 연동)
@@ -639,7 +698,7 @@ resource "ncloud_lb" "web_lb" {
   name           = "team1-web-lb"
   network_type   = "PUBLIC"
   type           = "NETWORK"
-  subnet_no_list = [ncloud_subnet.team1_lb_kr1.id, ncloud_subnet.team1_lb_kr2.id]
+  subnet_no_list = [ncloud_subnet.team1_lb_kr1.id]
 }
 
 # Web HTTP 대상 그룹 (RKE2 노드의 hostPort 80 바인딩)

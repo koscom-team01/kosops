@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: test-web-app
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/koscom-team01/kosops.git'
+    targetRevision: HEAD
+    path: gitops/charts/generic-app
+    helm:
+      values: |
+        replicaCount: 2
+        image:
+          repository: harbor.hwangonjang.com/library/test-web
+          tag: latest
+          pullPolicy: Always
+        ingress:
+          hosts:
+            - host: test-app.hwangonjang.com
+              paths:
+                - path: /
+                  pathType: Prefix
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: test-app
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
