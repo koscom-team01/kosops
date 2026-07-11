@@ -45,6 +45,9 @@ spec:
           limits:
             cpu: 1000m
             memory: 1024Mi
+        volumeMounts:
+        - name: runner-work
+          mountPath: /runner
       # 2. Docker-in-Docker (DinD) Sidecar (도커 이미지 빌드 지원용)
       - name: dind
         image: docker:dind
@@ -60,3 +63,10 @@ spec:
           limits:
             cpu: 1000m
             memory: 2048Mi
+        volumeMounts:
+        - name: runner-work
+          mountPath: /runner
+      volumes:
+      - name: runner-work
+        emptyDir: {}
+
