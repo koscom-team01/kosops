@@ -53,6 +53,9 @@ spec:
         image: docker:dind
         securityContext:
           privileged: true
+        command:
+        - dockerd-entrypoint.sh
+        - --insecure-registry=harbor.hwangonjang.com
         env:
         - name: DOCKER_TLS_CERTDIR
           value: ""
@@ -69,4 +72,6 @@ spec:
       volumes:
       - name: runner-work
         emptyDir: {}
+
+
 

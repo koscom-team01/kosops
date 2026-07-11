@@ -211,6 +211,26 @@ kubectl create secret generic github-runner-secret \
   --dry-run=client -o yaml | kubectl apply -f -
 echo -e "${GREEN}[OK] github-runner-secret 생성이 완료되었습니다.${NC}"
 
+# 5.2 CoreDNS에 Harbor 도메인 우회(Rewrite) 규칙 추가
+echo -e "\n${GREEN}[Step 5.2] CoreDNS에 Harbor 내부 우회 규칙 추가...${NC}"
+kubectl get configmap rke2-coredns-rke2-coredns -n kube-system -o json | \
+python3 -c "
+import sys, json
+cm = json.load(sys.stdin)
+corefile = cm['data']['Corefile']
+rule = 'rewrite name harbor.hwangonjang.com rke2-ingress-nginx.kube-system.svc.cluster.local'
+if rule not in corefile:
+    corefile = corefile.replace(
+        'kubernetes  cluster.local',
+        rule + '\n        kubernetes  cluster.local'
+    )
+    cm['data']['Corefile'] = corefile
+    print(json.dumps(cm))
+else:
+    sys.exit(0)
+" | kubectl apply -f - || true
+echo -e "${GREEN}[OK] CoreDNS 우회 규칙 적용 완료!${NC}"
+
 # 6. GitOps Root Application 배포
 echo -e "\n${GREEN}[Step 6] GitOps Root Application 배포 (ArgoCD)...${NC}"
 kubectl apply -f gitops/bootstrap/root-app.yaml
