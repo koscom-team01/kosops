@@ -25,6 +25,10 @@ spec:
       - name: runner
         image: summerwind/actions-runner:latest
         env:
+        - name: RUNNER_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
         - name: ORGANIZATION_URL
           value: "https://github.com/koscom-team01"
         - name: RUNNER_TOKEN

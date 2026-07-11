@@ -155,18 +155,16 @@ echo -e "\n${GREEN}[Step 4.1] Rancher Local Path Provisioner StorageClass 설치
 kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.28/deploy/local-path-storage.yaml
 kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
 
-# 5. Helm을 활용한 ArgoCD & Harbor 배포
-echo -e "\n${GREEN}[Step 5] Helm을 통한 ArgoCD 및 Harbor Private Registry 배포...${NC}"
+# 5. Helm을 활용한 ArgoCD 배포
+echo -e "\n${GREEN}[Step 5] Helm을 통한 ArgoCD 배포...${NC}"
 
 if ! command -v helm &> /dev/null; then
     echo -e "${RED}[WARNING] 로컬 머신에 helm 명령어가 없어 자동 플랫폼 배포를 생략합니다.${NC}"
-    echo -e "helm을 설치한 후 아래 명령어를 직접 실행해 ArgoCD 및 Harbor를 설치하세요."
+    echo -e "helm을 설치한 후 아래 명령어를 직접 실행해 ArgoCD를 설치하세요."
     echo -e "--------------------------------------------------------"
     echo -e "export KUBECONFIG=$(pwd)/$LOCAL_KUBECONFIG"
     echo -e "helm repo add argo https://argoproj.github.io/argo-helm"
     echo -e "helm upgrade --install argocd argo/argo-cd --namespace argocd --create-namespace -f gitops/bootstrap/argocd-values.yaml"
-    echo -e "helm repo add harbor https://helm.goharbor.io"
-    echo -e "helm upgrade --install harbor harbor/harbor --namespace harbor --create-namespace -f gitops/infrastructure/harbor-values.yaml"
     echo -e "--------------------------------------------------------"
 else
     # 4-1. ArgoCD 배포
@@ -178,16 +176,7 @@ else
         --create-namespace \
         -f gitops/bootstrap/argocd-values.yaml
 
-    # 4-2. Harbor 배포
-    echo -e "Harbor Private Registry 배포 중..."
-    helm repo add harbor https://helm.goharbor.io
-    helm repo update
-    helm upgrade --install harbor harbor/harbor \
-        --namespace harbor \
-        --create-namespace \
-        -f gitops/infrastructure/harbor-values.yaml
-
-    echo -e "${GREEN}[OK] ArgoCD 및 Harbor Helm 배포 완료!${NC}"
+    echo -e "${GREEN}[OK] ArgoCD Helm 배포 완료!${NC}"
 fi
 
 echo -e "\n${YELLOW}======================================================================${NC}"
