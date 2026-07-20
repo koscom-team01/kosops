@@ -33,7 +33,7 @@ spec:
               - grafana.hwangonjang.com
             path: /
         prometheus:
-          enabled: false
+          enabled: true
         filebeat:
           enabled: false
         logstash:
