@@ -16,7 +16,7 @@ spec:
         replicaCount: 2
         image:
           repository: harbor.hwangonjang.com/library/test-web
-          tag: latest
+          tag: 4
           pullPolicy: Always
         ingress:
           hosts:
