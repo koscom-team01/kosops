@@ -32,7 +32,7 @@ spec:
     spec:
       containers:
       - name: postgres
-        image: pgvector/pgvector:15-pgorg
+        image: pgvector/pgvector:pg15
         env:
         - name: POSTGRES_DB
           value: koscomdb

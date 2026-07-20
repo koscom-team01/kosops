@@ -30,6 +30,7 @@ spec:
       labels:
         app: neo4j
     spec:
+      enableServiceLinks: false
       containers:
       - name: neo4j
         image: neo4j:5.12.0-community
