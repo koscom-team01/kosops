@@ -1,78 +1,16 @@
-# 1. OS 이미지 및 서버 사양 조회 (Rocky Linux 8.x 및 스펙)
-data "ncloud_server_images" "images" {
+# 1. OS 이미지 조회 (Rocky Linux 8.10)
+data "ncloud_server_image" "rocky_810" {
   filter {
     name   = "product_name"
-    values = ["Rocky Linux 8.*"]
-    regex  = true
+    values = ["Rocky Linux 8.10"]
   }
 }
 
-data "ncloud_server_products" "bastion_spec" {
-  server_image_product_code = data.ncloud_server_images.images.server_images[0].product_code
-  filter {
-    name   = "product_code"
-    values = ["SSD"]
-    regex  = true
-  }
-  filter {
-    name   = "cpu_count"
-    values = ["2"]
-  }
-  filter {
-    name   = "memory_size"
-    values = ["4GB"]
-  }
-  filter {
-    name   = "product_type"
-    values = ["HICPU"]
-  }
-}
 
-data "ncloud_server_products" "cp_spec" {
-  server_image_product_code = data.ncloud_server_images.images.server_images[0].product_code
-  filter {
-    name   = "product_code"
-    values = ["SSD"]
-    regex  = true
-  }
-  filter {
-    name   = "cpu_count"
-    values = ["2"]
-  }
-  filter {
-    name   = "memory_size"
-    values = ["8GB"]
-  }
-  filter {
-    name   = "product_type"
-    values = ["STAND"]
-  }
-}
-
-data "ncloud_server_products" "dp_spec" {
-  server_image_product_code = data.ncloud_server_images.images.server_images[0].product_code
-  filter {
-    name   = "product_code"
-    values = ["SSD"]
-    regex  = true
-  }
-  filter {
-    name   = "cpu_count"
-    values = ["2"]
-  }
-  filter {
-    name   = "memory_size"
-    values = ["8GB"]
-  }
-  filter {
-    name   = "product_type"
-    values = ["STAND"]
-  }
-}
 
 # 2. VPC 및 서브넷 구성 (Multi-AZ 6개 서브넷 + NATGW 전용 서브넷)
 resource "ncloud_vpc" "vpc" {
-  name            = "hackathon"
+  name            = "team1-vpc"
   ipv4_cidr_block = "192.168.0.0/16"
 }
 
@@ -169,7 +107,7 @@ resource "ncloud_nat_gateway" "nat_gw" {
   vpc_no    = ncloud_vpc.vpc.id
   subnet_no = ncloud_subnet.team1_nat_sub.id
   zone      = var.zone_kr1
-  name      = "hackathon-m-ng01"
+  name      = "team1-nat-gw"
 }
 
 # Public 서브넷용 라우팅 테이블
@@ -558,8 +496,8 @@ resource "ncloud_network_interface" "cp_nic" {
 resource "ncloud_server" "bastion" {
   subnet_no                 = ncloud_subnet.team1_pub_kr1.id
   name                      = "team1-bastion"
-  server_image_product_code = data.ncloud_server_images.images.server_images[0].product_code
-  server_product_code       = data.ncloud_server_products.bastion_spec.server_products[0].product_code
+  server_image_product_code = data.ncloud_server_image.rocky_810.product_code
+  server_product_code       = var.ncloud_site == "fin" ? var.fin_server_product_code : "SVR.VSVR.STAND.C002.M004.NET.SSD.B050.G002"
   login_key_name            = ncloud_login_key.key.key_name
   init_script_no            = ncloud_init_script.bastion_init.id
 
@@ -583,8 +521,8 @@ resource "random_string" "rke2_token" {
 resource "ncloud_server" "rke2_cp" {
   subnet_no                 = ncloud_subnet.team1_pri_kr1.id
   name                      = "team1-rke2-cp"
-  server_image_product_code = data.ncloud_server_images.images.server_images[0].product_code
-  server_product_code       = data.ncloud_server_products.cp_spec.server_products[0].product_code
+  server_image_product_code = data.ncloud_server_image.rocky_810.product_code
+  server_product_code       = var.ncloud_site == "fin" ? var.fin_server_product_code : "SVR.VSVR.STAND.C002.M008.NET.SSD.B050.G002"
   login_key_name            = ncloud_login_key.key.key_name
   init_script_no            = ncloud_init_script.rke2_cp_init.id
 
@@ -602,15 +540,15 @@ resource "random_id" "dp_lc_suffix" {
   byte_length = 4
   keepers = {
     init_script_id = ncloud_init_script.rke2_dp_init.id
-    image_code     = data.ncloud_server_images.images.server_images[0].product_code
-    product_code   = data.ncloud_server_products.dp_spec.server_products[0].product_code
+    image_code     = data.ncloud_server_image.rocky_810.product_code
+    product_code   = var.ncloud_site == "fin" ? var.fin_server_product_code : "SVR.VSVR.STAND.C002.M008.NET.SSD.B050.G002"
   }
 }
 
 resource "ncloud_launch_configuration" "dp_lc" {
   name                      = "team1-rke2-dp-lc-${random_id.dp_lc_suffix.hex}"
-  server_image_product_code = data.ncloud_server_images.images.server_images[0].product_code
-  server_product_code       = data.ncloud_server_products.dp_spec.server_products[0].product_code
+  server_image_product_code = data.ncloud_server_image.rocky_810.product_code
+  server_product_code       = var.ncloud_site == "fin" ? var.fin_server_product_code : "SVR.VSVR.STAND.C002.M008.NET.SSD.B050.G002"
   login_key_name            = ncloud_login_key.key.key_name
   init_script_no            = ncloud_init_script.rke2_dp_init.id
 

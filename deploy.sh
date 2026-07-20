@@ -64,9 +64,33 @@ if [ -z "$GITHUB_PAT" ]; then
     read -r GITHUB_PAT
 fi
 
+# Naver Cloud 플랫폼 선택 (Public vs Financial)
+echo -e "\n${YELLOW}배포할 Naver Cloud Platform 환경을 선택하세요:${NC}"
+echo -e "  1) Public Cloud (기본값)"
+echo -e "  2) Financial (금융) Cloud"
+echo -n "선택 (1 또는 2): "
+read -r CLOUD_CHOICE
+
+if [ "$CLOUD_CHOICE" = "2" ]; then
+    echo -e "${GREEN}[INFO] Naver Financial Cloud 환경으로 배포를 진행합니다.${NC}"
+    NCLOUD_SITE="fin"
+    NCLOUD_REGION="FKR"
+    ZONE_KR1="FKR-1"
+    ZONE_KR2="FKR-2"
+else
+    echo -e "${GREEN}[INFO] Naver Public Cloud 환경으로 배포를 진행합니다.${NC}"
+    NCLOUD_SITE="public"
+    NCLOUD_REGION="KR"
+    ZONE_KR1="KR-1"
+    ZONE_KR2="KR-2"
+fi
+
 # 2. Terraform을 통한 NCP 리소스 생성
 echo -e "\n${GREEN}[Step 1] Naver Cloud VPC 및 RKE2 인프라 생성 (Terraform)...${NC}"
 cd terraform/envs/koscom-team01
+
+# 기존 캐시 및 락 파일로 인한 프로바이더 버전 충돌 방지
+rm -rf .terraform .terraform.lock.hcl
 
 terraform init
 
@@ -74,7 +98,11 @@ echo -e "${GREEN}[INFO] Terraform Apply 시작...${NC}"
 terraform apply -auto-approve \
   -var="ncloud_access_key=${ACCESS_KEY}" \
   -var="ncloud_secret_key=${SECRET_KEY}" \
-  -var="admin_ip=${ADMIN_IP}"
+  -var="admin_ip=${ADMIN_IP}" \
+  -var="ncloud_site=${NCLOUD_SITE}" \
+  -var="ncloud_region=${NCLOUD_REGION}" \
+  -var="zone_kr1=${ZONE_KR1}" \
+  -var="zone_kr2=${ZONE_KR2}"
 
 # Output 정보 파싱
 BASTION_IP=$(terraform output -raw bastion_public_ip)
@@ -173,6 +201,9 @@ if ! command -v helm &> /dev/null; then
     echo -e "helm upgrade --install argocd argo/argo-cd --namespace argocd --create-namespace -f gitops/bootstrap/argocd-values.yaml"
     echo -e "--------------------------------------------------------"
 else
+    # RKE2 내장 Ingress Controller 웹훅 일시 삭제 (ArgoCD Ingress 배포 시 웹훅 미준비로 인한 충돌 방지)
+    kubectl delete validatingwebhookconfiguration rke2-ingress-nginx-admission --ignore-not-found=true || true
+
     # 4-1. ArgoCD 배포
     echo -e "ArgoCD 배포 중..."
     helm repo add argo https://argoproj.github.io/argo-helm

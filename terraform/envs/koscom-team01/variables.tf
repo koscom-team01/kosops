@@ -40,8 +40,20 @@ variable "ncloud_site" {
   default     = "public"
 }
 
+variable "ncloud_region" {
+  type        = string
+  description = "Naver Cloud Platform Region (KR 또는 FKR)"
+  default     = "KR"
+}
+
 variable "zone" {
   type        = string
   description = "Placeholder legacy zone parameter to silence tfvars warnings"
   default     = "KR-1"
+}
+
+variable "fin_server_product_code" {
+  type        = string
+  description = "금융 클라우드 가상 서버 상품 스펙 코드 (1세대)"
+  default     = "SVR.VSVR.STAND.C002.M008.NET.SSD.B050.G001"
 }
