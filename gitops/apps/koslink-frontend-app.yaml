@@ -1,0 +1,43 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: koslink-frontend-app
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/koscom-team01/kosops.git'
+    targetRevision: HEAD
+    path: gitops/charts/generic-app
+    helm:
+      values: |
+        replicaCount: 2
+        image:
+          repository: harbor.hwangonjang.com/library/koslink-frontend
+          tag: 1
+          pullPolicy: Always
+        service:
+          type: ClusterIP
+          port: 80
+        ingress:
+          enabled: true
+          className: nginx
+          annotations:
+            ingress.kubernetes.io/ssl-redirect: "false"
+            nginx.ingress.kubernetes.io/ssl-redirect: "false"
+          hosts:
+            - host: koslink.hwangonjang.com
+              paths:
+                - path: /
+                  pathType: Prefix
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: koslink
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
