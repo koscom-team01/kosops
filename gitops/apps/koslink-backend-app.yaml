@@ -34,7 +34,7 @@ spec:
                   pathType: Prefix
         env:
           - name: SPRING_DATASOURCE_URL
-            value: "jdbc:postgresql://postgres-service:5432/koscomdb"
+            value: "jdbc:postgresql://postgresql.database.svc.cluster.local:5432/koscomdb"
           - name: SPRING_DATASOURCE_USERNAME
             value: "admin"
           - name: SPRING_DATASOURCE_PASSWORD
