@@ -42,7 +42,7 @@ spec:
           - name: AI_SERVICE_URL
             value: "http://koslink-ai-app:8000"
           - name: CORS_ALLOWED_ORIGINS
-            value: "https://koslink.hwangonjang.com,http://koslink.hwangonjang.com,https://koslink-ai.hwangonjang.com,https://team1.hwangonjang.com,http://localhost:5173"
+            value: "https://koslink.hwangonjang.com,http://koslink.hwangonjang.com,https://koslink-ai.hwangonjang.com,https://team1.hwangonjang.com,http://localhost:5173,https://koslink-api.hwangonjang.com"
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: koslink
