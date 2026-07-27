@@ -28,7 +28,7 @@ spec:
             ingress.kubernetes.io/ssl-redirect: "false"
             nginx.ingress.kubernetes.io/ssl-redirect: "false"
           hosts:
-            - host: team1.hwangonjang.com
+            - host: koslink.hwangonjang.com
               paths:
                 - path: /
                   pathType: Prefix
