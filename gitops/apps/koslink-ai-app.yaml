@@ -1,0 +1,54 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: koslink-ai-app
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/koscom-team01/kosops.git'
+    targetRevision: HEAD
+    path: gitops/charts/generic-app
+    helm:
+      values: |
+        replicaCount: 1
+        image:
+          repository: harbor.hwangonjang.com/library/koslink-ai
+          tag: 1
+          pullPolicy: Always
+        service:
+          type: ClusterIP
+          port: 8000
+        ingress:
+          enabled: true
+          className: nginx
+          annotations:
+            ingress.kubernetes.io/ssl-redirect: "false"
+            nginx.ingress.kubernetes.io/ssl-redirect: "false"
+          hosts:
+            - host: koslink-ai.hwangonjang.com
+              paths:
+                - path: /
+                  pathType: Prefix
+        env:
+          - name: PG_CONNECTION_STRING
+            value: "postgresql+psycopg://admin:adminpassword@postgresql.database.svc.cluster.local:5432/koscomdb"
+          - name: NEO4J_URI
+            value: "bolt://neo4j.neo4j.svc.cluster.local:7687"
+          - name: NEO4J_USER
+            value: "neo4j"
+          - name: NEO4J_PASSWORD
+            value: "neo4jpassword"
+          - name: PORT
+            value: "8000"
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: koslink
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
