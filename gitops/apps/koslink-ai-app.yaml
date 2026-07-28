@@ -16,7 +16,7 @@ spec:
         replicaCount: 1
         image:
           repository: harbor.hwangonjang.com/library/koslink-ai
-          tag: 29
+          tag: 30
           pullPolicy: Always
         service:
           type: ClusterIP
