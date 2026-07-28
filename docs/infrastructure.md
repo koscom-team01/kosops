@@ -107,12 +107,16 @@ graph TD
 * **가용영역(AZ)**은 동일 리전(Region) 내에서 전원, 냉각, 네트워크 인프라가 물리적으로 완전히 독립된 전용 데이터센터입니다.
 * NCP 한국 리전(KR)은 `KR-1`과 `KR-2` 2개의 존을 제공하며, 한쪽 데이터센터에 지진, 정전, 화재 등 재해가 발생해도 다른 존의 리소스는 상호 영향을 받지 않고 계속 작동합니다.
 
-### 3.2 현재 인프라의 Multi-AZ 구성 구조
+### 3.3 NAT Gateway 및 Bastion Host의 단일 AZ(KR-1) 배치 사유
 
-| 가용영역 (AZ) | 배치된 주요 리소스 | 고가용성(HA) 및 보안적 이점 |
-| :--- | :--- | :--- |
-| **Zone KR-1** | • NAT Gateway (`team1-nat-gw`)<br>• Bastion Host (`team1-bastion`)<br>• Public LB Subnet 1 (`team1-lb-kr1`)<br>• RKE2 Control Plane Subnet (`team1-pri-kr1`)<br>• Active DB Subnet (`team1-db-kr1`) | • 관리자 접속 및 인터넷 출입구 역할 수행<br>• 제어면(Control Plane) 인스턴스 독립 배치<br>• 주 데이터베이스 영역 확보 |
-| **Zone KR-2** | • Public LB Subnet 2 (`team1-lb-kr2`)<br>• RKE2 Data Plane Subnet (`team1-pri-kr2`)<br>• Standby DB Subnet (`team1-db-kr2`) | • 워커 노드(Data Plane) 오토스케일링 그룹 격리 분리<br>• 데이터베이스 이중화(Standby) 서브넷 배치 |
+1. **NAT Gateway (단일 AZ: KR-1 배치 사유)**
+   * **비용 절감 (Cost Efficiency)**: NAT Gateway는 기본 가동 비용(월 약 73,000원)이 높습니다. AZ별로 각 1개씩(KR-1 1개, KR-2 1개) 중복 구축할 경우 고정 비용이 2배(약 146,000원/월)로 상승합니다. 현재 VPC는 KR-1에 배치된 1대의 NAT Gateway만으로도 KR-1 및 KR-2 프라이빗 서브넷의 아웃바운드 인터넷 라우팅을 모두 정상 수용할 수 있습니다.
+   * **인바운드 서비스 무영향 (Traffic Path Isolation)**: 외부 사용자가 웹 서비스에 접속하는 인바운드 트래픽은 퍼블릭 NLB(`team1-web-lb`)를 타고 들어오므로, NAT Gateway의 가동 여부와 전혀 무관하게 서비스가 작동합니다. (NAT Gateway는 외부 패키지 다운로드 등 오직 내부 노드의 아웃바운드 인터넷 통신에만 관여)
+
+2. **Bastion Host (단일 AZ: KR-1 배치 사유)**
+   * **운영 전용 점프 호스트**: Bastion Host는 대고객 서비스 제공용 서버가 아니라, 관리자가 사설망 인스턴스에 SSH로 접속하기 위한 점프 호스트(Jump Host)입니다.
+   * **자원 및 IP 절감**: 단일 인스턴스 및 1개의 공인 IP만 할당하여 비용과 관리 포인트를 최소화하였습니다.
+   * **대체 접속 수단 존재**: Bastion 단일 장애 시에도 개발자는 K8s API NLB(`team1-api-lb` / `kubectl`)를 통해 클러스터 및 파드 제어가 가능하며, 필요 시 IaC(테라폼)를 통해 1분 내 KR-2 서브넷으로 재생성할 수 있습니다.
 
 ---
 
