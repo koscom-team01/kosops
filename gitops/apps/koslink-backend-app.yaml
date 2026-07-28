@@ -13,7 +13,7 @@ spec:
     path: gitops/charts/generic-app
     helm:
       values: |
-        replicaCount: 2
+        replicaCount: 1
         image:
           repository: harbor.hwangonjang.com/library/koslink-backend
           tag: 7
@@ -32,17 +32,9 @@ spec:
               paths:
                 - path: /
                   pathType: Prefix
-        env:
-          - name: SPRING_DATASOURCE_URL
-            value: "jdbc:postgresql://postgresql.database.svc.cluster.local:5432/koscomdb"
-          - name: SPRING_DATASOURCE_USERNAME
-            value: "admin"
-          - name: SPRING_DATASOURCE_PASSWORD
-            value: "adminpassword"
-          - name: AI_SERVICE_URL
-            value: "http://koslink-ai-app:8000"
-          - name: CORS_ALLOWED_ORIGINS
-            value: "https://koslink.hwangonjang.com,http://koslink.hwangonjang.com,https://koslink-ai.hwangonjang.com,https://team1.hwangonjang.com,http://localhost:5173,https://koslink-api.hwangonjang.com"
+        envFrom:
+          - secretRef:
+              name: koslink-backend-secret
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: koslink
