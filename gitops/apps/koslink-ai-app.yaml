@@ -16,7 +16,7 @@ spec:
         replicaCount: 1
         image:
           repository: harbor.hwangonjang.com/library/koslink-ai
-          tag: 23
+          tag: 21
           pullPolicy: Always
         service:
           type: ClusterIP
@@ -41,6 +41,28 @@ spec:
             value: "neo4j"
           - name: NEO4J_PASSWORD
             value: "neo4jpassword"
+          - name: OPENAI_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: koslink-ai-secret
+                key: OPENAI_API_KEY
+          - name: DART_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: koslink-ai-secret
+                key: DART_API_KEY
+          - name: DART_CACHE_DIR
+            value: ".cache/dart"
+          - name: EMBEDDING_PROVIDER
+            value: "openai"
+          - name: EMBEDDING_MODEL_KURE
+            value: "nlpai-lab/KURE-v1"
+          - name: EMBEDDING_MODEL_BGE_M3
+            value: "BAAI/bge-m3"
+          - name: EMBEDDING_DEVICE
+            value: "cpu"
+          - name: VECTOR_COLLECTION_NAME
+            value: "market_evidence"
           - name: PORT
             value: "8000"
   destination:
