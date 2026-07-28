@@ -25,6 +25,8 @@ spec:
               ingress.kubernetes.io/ssl-redirect: "false"
               nginx.ingress.kubernetes.io/proxy-body-size: "0"
         externalURL: https://harbor.hwangonjang.com
+        registry:
+          relativeurls: true
         persistence:
           enabled: true
           resourceTemplates:
