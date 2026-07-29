@@ -16,7 +16,7 @@ spec:
         replicaCount: 2
         image:
           repository: harbor.hwangonjang.com/library/koslink-frontend
-          tag: 15
+          tag: 16
           pullPolicy: Always
         service:
           type: ClusterIP
